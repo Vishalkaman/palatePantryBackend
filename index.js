@@ -8,7 +8,13 @@ const PORT = 3000;
 
 // Middleware
 app.use(bodyParser.json());
-app.use(cors());
+
+const corsOptions = {
+    origin: 'http://3.108.249.210:5173', // Replace with your frontend domain
+    optionsSuccessStatus: 200
+};
+
+app.use(cors(corsOptions));
 
 // Import routes
 const userRoutes = require('./routes/userRoutes');
