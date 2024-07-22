@@ -29,8 +29,14 @@ const updateUserBudget = async (req, res) => {
   const { spent_amount } = req.body;
 
   try {
-    // Log incoming request
     console.log("Update budget request received for user ID:", userId);
+    console.log("Received spent_amount:", spent_amount);
+
+    // Convert spent_amount to a float
+    let spentAmount = parseFloat(spent_amount);
+    if (isNaN(spentAmount)) {
+      throw new Error("Invalid spent_amount value");
+    }
 
     // Fetch the user's current budget
     const [budget] = await db.execute(
@@ -40,13 +46,17 @@ const updateUserBudget = async (req, res) => {
 
     if (budget.length > 0) {
       const userBudget = budget[0];
-      
+      console.log("Current spent_amount in DB:", userBudget.spent_amount);
+
       // Update the budget with the new spent amount
+      let newSpentAmount = parseFloat(userBudget.spent_amount) + spentAmount;
+      console.log("New spent_amount to be set:", newSpentAmount);
+
       const [result] = await db.execute(
         `UPDATE Budget
          SET spent_amount = ?
          WHERE user_id = ? AND NOW() BETWEEN start_date AND end_date`,
-        [spent_amount, userId]
+        [newSpentAmount, userId]
       );
 
       if (result.affectedRows > 0) {
@@ -58,7 +68,6 @@ const updateUserBudget = async (req, res) => {
 
         const currentBudget = updatedBudget.length > 0 ? updatedBudget[0] : null;
 
-        // Log success and return response
         console.log("Budget updated successfully for user ID:", userId);
 
         res.json({
@@ -80,7 +89,9 @@ const updateUserBudget = async (req, res) => {
     console.error("Internal Server Error:", error.message);
     res.status(500).json({ error: "Internal Server Error" });
   }
-};
+}
+
+
 
 
 
