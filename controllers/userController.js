@@ -63,34 +63,100 @@ const getUserByUsername = async (req, res) => {
   }
 };
 
+
+
 const loginUser = async (req, res) => {
   const { username, password } = req.body;
   try {
-    const [users] = await db.execute("SELECT * FROM Users WHERE username = ?", [
-      username,
-    ]);
+    // Log incoming request
+    console.log("Login request received for username:", username);
+
+    // Fetch user details
+    const [users] = await db.execute("SELECT * FROM Users WHERE username = ?", [username]);
+
     if (users.length > 0) {
       const user = users[0];
-      const match = await bcrypt.compare(password, user.passwd);
-      if (match) {
-        const token = jwt.sign({ id: user.id }, "your_jwt_secret");
-        res.json({
-          // token,
-          userid: user.id,
-          username: user.username,
-          email: user.email,
-          contactNumber: user.contactNumber,
-        });
+
+      // Check if password and passwd are present
+      if (password && user.passwd) {
+        console.log("User found, comparing passwords...");
+
+        const match = await bcrypt.compare(password, user.passwd);
+
+        if (match) {
+          console.log("Passwords match, generating token...");
+
+          const token = jwt.sign({ id: user.id }, "your_jwt_secret");
+
+          // Fetch the user's current budget
+          const [budget] = await db.execute(
+            "SELECT * FROM Budget WHERE user_id = ? AND NOW() BETWEEN start_date AND end_date",
+            [user.id]
+          );
+
+          let currentBudget = null;
+          if (budget.length > 0) {
+            const userBudget = budget[0];
+            currentBudget = {
+              period: userBudget.period,
+              startDate: userBudget.start_date,
+              endDate: userBudget.end_date,
+              allocatedAmount: userBudget.allocated_amount,
+              spentAmount: userBudget.spent_amount,
+            };
+          }
+
+          // Fetch allergens from all family members
+          const [familyMembers] = await db.execute("SELECT allergens FROM FamilyMembers WHERE user_id = ?", [user.id]);
+
+          const allergensList = familyMembers.reduce((acc, member) => {
+            try {
+              const allergens = JSON.parse(member.allergens);
+              Object.keys(allergens).forEach((allergen) => {
+                if (allergens[allergen]) {
+                  acc.add(allergen);
+                }
+              });
+            } catch (e) {
+              console.error(`Error parsing allergens for family member ${member.id}:`, e.message);
+            }
+            return acc;
+          }, new Set());
+
+          // Log success and return response
+          console.log("Login successful for user:", user.username);
+
+          res.json({
+            token,
+            userid: user.id,
+            username: user.username,
+            email: user.email,
+            contactNumber: user.conactNumber, // note the correct field name
+            currentBudget,
+            allergens: Array.from(allergensList),
+          });
+        } else {
+          console.error("Password mismatch for user:", user.username);
+          res.status(400).json({ error: "Invalid credentials" });
+        }
       } else {
+        console.error("Password or password hash is missing for user:", user.username);
         res.status(400).json({ error: "Invalid credentials" });
       }
     } else {
+      console.error("User not found for username:", username);
       res.status(400).json({ error: "Invalid credentials" });
     }
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("Internal Server Error:", error.message);
+    res.status(500).json({ error: "Internal Server Error" });
   }
 };
+
+
+
+
+
 
 module.exports = {
   createUser,

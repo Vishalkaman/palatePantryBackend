@@ -23,7 +23,69 @@ const getBudgetsByUser = async (req, res) => {
     }
 };
 
+// controllers/budgetController.js
+const updateUserBudget = async (req, res) => {
+  const { userId } = req.params;
+  const { spent_amount } = req.body;
+
+  try {
+    // Log incoming request
+    console.log("Update budget request received for user ID:", userId);
+
+    // Fetch the user's current budget
+    const [budget] = await db.execute(
+      "SELECT * FROM Budget WHERE user_id = ? AND NOW() BETWEEN start_date AND end_date",
+      [userId]
+    );
+
+    if (budget.length > 0) {
+      const userBudget = budget[0];
+      
+      // Update the budget with the new spent amount
+      const [result] = await db.execute(
+        `UPDATE Budget
+         SET spent_amount = ?
+         WHERE user_id = ? AND NOW() BETWEEN start_date AND end_date`,
+        [spent_amount, userId]
+      );
+
+      if (result.affectedRows > 0) {
+        // Fetch the updated budget to return
+        const [updatedBudget] = await db.execute(
+          "SELECT * FROM Budget WHERE user_id = ? AND NOW() BETWEEN start_date AND end_date",
+          [userId]
+        );
+
+        const currentBudget = updatedBudget.length > 0 ? updatedBudget[0] : null;
+
+        // Log success and return response
+        console.log("Budget updated successfully for user ID:", userId);
+
+        res.json({
+          period: currentBudget.period,
+          startDate: currentBudget.start_date,
+          endDate: currentBudget.end_date,
+          allocatedAmount: currentBudget.allocated_amount,
+          spentAmount: currentBudget.spent_amount,
+        });
+      } else {
+        console.error("No rows affected during budget update for user ID:", userId);
+        res.status(400).json({ error: "Budget update failed" });
+      }
+    } else {
+      console.error("Budget not found for user ID:", userId);
+      res.status(404).json({ error: "Budget not found" });
+    }
+  } catch (error) {
+    console.error("Internal Server Error:", error.message);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+
+
 module.exports = {
     createBudget,
-    getBudgetsByUser
+    getBudgetsByUser,
+    updateUserBudget
 };
