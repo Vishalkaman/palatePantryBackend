@@ -153,6 +153,71 @@ const loginUser = async (req, res) => {
   }
 };
 
+// Express route handler to get user details
+const getUserDetails = async (req, res) => {
+  const { user_id } = req.body;
+  
+  try {
+    // Fetch user details
+    const [users] = await db.execute("SELECT * FROM Users WHERE id = ?", [user_id]);
+
+    if (users.length > 0) {
+      const user = users[0];
+
+      // Fetch the user's current budget
+      const [budget] = await db.execute(
+        "SELECT * FROM Budget WHERE user_id = ? AND NOW() BETWEEN start_date AND end_date",
+        [user.id]
+      );
+
+      let currentBudget = null;
+      if (budget.length > 0) {
+        const userBudget = budget[0];
+        currentBudget = {
+          period: userBudget.period,
+          startDate: userBudget.start_date,
+          endDate: userBudget.end_date,
+          allocatedAmount: userBudget.allocated_amount,
+          spentAmount: userBudget.spent_amount,
+        };
+      }
+
+      // Fetch allergens from all family members
+      const [familyMembers] = await db.execute("SELECT allergens FROM FamilyMembers WHERE user_id = ?", [user.id]);
+
+      const allergensList = familyMembers.reduce((acc, member) => {
+        try {
+          const allergens = JSON.parse(member.allergens);
+          Object.keys(allergens).forEach((allergen) => {
+            if (allergens[allergen]) {
+              acc.add(allergen);
+            }
+          });
+        } catch (e) {
+          console.error(`Error parsing allergens for family member ${member.id}:`, e.message);
+        }
+        return acc;
+      }, new Set());
+
+      // Return user details
+      res.json({
+        userid: user.id,
+        username: user.username,
+        email: user.email,
+        contactNumber: user.conactNumber, // note the correct field name
+        currentBudget,
+        allergens: Array.from(allergensList),
+      });
+    } else {
+      res.status(404).json({ error: "User not found" });
+    }
+  } catch (error) {
+    console.error("Internal Server Error:", error.message);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+
 
 
 
@@ -163,5 +228,6 @@ module.exports = {
   getAllUsers,
   loginUser,
   getUserById,
+  getUserDetails,
   getUserByUsername,
 };
